@@ -18,6 +18,7 @@ import open from 'open';
 import os from 'os';
 import {createEmailMessage} from "./utl.js";
 import { createLabel, updateLabel, deleteLabel, listLabels, findLabelByName, getOrCreateLabel, GmailLabel } from "./label-manager.js";
+import { getUserCredentials } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -260,6 +261,7 @@ const BatchDeleteEmailsSchema = z.object({
 
 // Main function
 async function main() {
+    /*
     await loadCredentials();
 
     if (process.argv[2] === 'auth') {
@@ -270,6 +272,7 @@ async function main() {
 
     // Initialize Gmail API
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+    */
 
     // Server implementation
     const server = new Server({
@@ -353,6 +356,29 @@ async function main() {
 
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { name, arguments: args } = request.params;
+
+        // Get credentials from environment variables
+        const serviceName = process.env.SERVICE_NAME || 'gmail';
+        const userId = process.env.USER_ID || 'default';
+
+        // Get user credentials
+        const credentials = getUserCredentials(serviceName, userId);
+        if (!credentials) {
+            throw new Error('NO CREDENTIALS FOUND FOR USER');
+        }
+
+        // Create OAuth2Client with credentials
+        const oauth2Client = new OAuth2Client();
+        oauth2Client.setCredentials({
+            access_token: credentials.token,
+            expiry_date: new Date(credentials.expiry).getTime()
+        });
+
+        // Initialize Gmail API client
+        const gmail = google.gmail({
+            version: 'v1',
+            auth: oauth2Client
+        });
 
         async function handleEmailAction(action: "send" | "draft", validatedArgs: any) {
             const message = createEmailMessage(validatedArgs);
