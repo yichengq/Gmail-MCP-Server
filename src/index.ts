@@ -219,6 +219,13 @@ const DeleteEmailSchema = z.object({
     messageId: z.string().describe("ID of the email message to delete"),
 });
 
+// New schema for getting email attachments
+const GetAttachmentSchema = z.object({
+    messageId: z.string().describe("ID of the email message containing the attachment"),
+    attachmentId: z.string().describe("ID of the attachment to retrieve"),
+    file_name: z.string().describe("Filename to save the attachment as"),
+});
+
 // New schema for listing email labels
 const ListEmailLabelsSchema = z.object({}).describe("Retrieves all available Gmail labels");
 
@@ -315,6 +322,11 @@ async function main() {
                 name: "delete_email",
                 description: "Permanently deletes an email",
                 inputSchema: zodToJsonSchema(DeleteEmailSchema),
+            },
+            {
+                name: "get_attachment",
+                description: "Downloads an email attachment",
+                inputSchema: zodToJsonSchema(GetAttachmentSchema),
             },
             {
                 name: "list_email_labels",
@@ -527,7 +539,7 @@ async function main() {
                     // Add attachment info to output if any are present
                     const attachmentInfo = attachments.length > 0 ?
                         `\n\nAttachments (${attachments.length}):\n` +
-                        attachments.map(a => `- ${a.filename} (${a.mimeType}, ${Math.round(a.size/1024)} KB)`).join('\n') : '';
+                        attachments.map(a => `- ${a.filename} (${a.mimeType}, ${Math.round(a.size/1024)} KB) (id: ${a.id})`).join('\n') : '';
 
                     return {
                         content: [
@@ -626,6 +638,42 @@ async function main() {
                                 type: "text",
                                 text: `Email ${validatedArgs.messageId} deleted successfully`,
                             },
+                        ],
+                    };
+                }
+
+                case "get_attachment": {
+                    const validatedArgs = GetAttachmentSchema.parse(args);
+
+                    // Get the attachment from Gmail API
+                    const attachment = await gmail.users.messages.attachments.get({
+                        userId: 'me',
+                        messageId: validatedArgs.messageId,
+                        id: validatedArgs.attachmentId
+                    });
+
+                    // Get the attachment data
+                    const data = attachment.data.data;
+
+                    if (!data) {
+                        throw new Error('Attachment data not found');
+                    }
+
+                    // Decode from base64url to binary
+                    const buffer = Buffer.from(data, 'base64');
+
+                    return {
+                        content: [
+                            {
+                                type: "text",
+                                text: `Attachment retrieved successfully. Size: ${buffer.length} bytes`,
+                            },
+                            {
+                                type: "resource",
+                                resource: {
+                                    blob: buffer.toString('base64'),
+                                }
+                            }
                         ],
                     };
                 }
